@@ -1,0 +1,163 @@
+---
+title: "Climatology Plot of Panjshir catchment"
+author: "kabiraj"
+date: "12/28/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+```
+
+## Background 
+
+This document shows the code for generating the climatology plot of the Panjshir catchment. The temperature and precipitation are extracted from the base model having the input of the ERA data and the monthly average temperate and precipitation are plotted. Firstly, old files are removed and required library are imported
+
+```{r, message=FALSE}
+  rm(list =ls())
+
+  library(data.table)
+  library(dplyr)
+  library(ggplot2)
+
+```
+
+Next, the data is imported 
+```{r}
+indir <- "E:\\Panjshir_snowcover_paper_Santosh\\input_files_4figure\\baseERAmodel_input\\"
+outdir <- "E:\\Panjshir_snowcover_paper_Santosh\\outputFIGURES\\"
+
+```
+
+## Data waggling  
+### Preparation for the precipitation data
+```{r,  warning=FALSE}
+#read data
+rain <- fread(paste(indir,"rain.dat",sep=""),skip = 16)
+#head(rain)
+rain$DailyPavg = rowMeans(rain[,-1], na.rm = TRUE)
+
+#look at the format of the computer date and change accordingly if required 
+rain$Date <- as.Date(rain$V1, format= "%Y-%m-%d")
+rain$Year <- format(as.Date(rain$Date), format= "%Y")
+rain$Month <- format(as.Date(rain$Date), format= "%m")
+
+#selecting only the average value from the data 
+rain2 <- rain %>%
+  select(Date, Year, Month, DailyPavg)
+
+#quick view of the data 
+head(rain2)
+
+```
+### preparation of the temperature data
+```{r,  warning=FALSE}
+#read data
+tavg <- fread(paste(indir,"tmean.dat",sep=""),skip = 16)
+
+#finding the ncol(tavg) and selecting the data 
+tavg$DailyTavg <- rowMeans(tavg[, 2:53], na.rm = TRUE)
+
+tavg$Date <- as.Date(tavg$V1, format= "%Y-%m-%d")
+
+#selecting only the daily average temperature of each date
+ tavg2 <- tavg %>%
+   select(Date, DailyTavg)
+
+#Quick outlook of the first five rows of the data
+head(tavg2)
+
+```
+
+Now merging two table and fixing the study duration 
+```{r,  message=FALSE}
+#merging both the Precipitation and temperature data together
+PT <- merge(x = rain2, y = tavg2, by = "Date", all = TRUE)
+
+#keeping only the required column
+PT2 <- PT %>%
+  select(Date, Year, Month, DailyPavg, DailyTavg )
+
+#Calculation for each month for analysis
+yearNmonth <- PT2 %>% 
+                group_by(Year,Month) %>% 
+                filter(Year <= 2010) %>%
+                filter(Year >= 1981) %>%
+                summarise(Precip = round(sum(DailyPavg),0),
+                          AvgTemp = round(mean(DailyTavg),0))
+    
+#Monthly Calculation 
+Annualprecip <- yearNmonth %>%
+                group_by(Month) %>%
+                summarise(AP = round(mean(Precip),0),
+                          AT = round(mean(AvgTemp),0))
+
+```
+
+
+## Visulization
+Our aim is to keep both the temperature and precipitaiton in a single plot, however initially the individual plots are plotted before making final plot. 
+
+### Monthly average precipitaiton plot 
+```{r}
+ggplot(data = Annualprecip) +
+  geom_bar(mapping = aes(x = Month, y = AP), stat = "identity") + 
+  ylab("Precipitation (mm)")
+```
+
+### Monthly average temperature plot
+```{r}
+ggplot(data = Annualprecip) +
+  geom_point(mapping = aes(x = Month, y = AT)) + 
+  geom_line(mapping = aes(x = Month, y = AT, group = 1)) + 
+  ylab(expression("Temperature ("~degree~"C)"))
+
+```
+
+### Climatology plot of the region 
+
+```{r}
+#defining the minimimun of the variables
+ylim.prim <- c(0, 120) #for precip
+ylim.sec <- c(-20, 10) #for temp
+b <- diff(ylim.prim)/diff(ylim.sec)
+a <- b*(ylim.prim[1] - ylim.sec[1])
+
+#plot
+ggplot(data = Annualprecip) +
+  geom_bar(mapping = aes(x = Month, y = AP), stat = "identity", fill="blue", alpha= 0.5) + 
+  geom_point(mapping = aes(x = Month, y = a+AT*b), color= "red", size = 2.5) + 
+  geom_line(mapping = aes(x = Month, y = a+AT*b, group = 1), color = "red", size =1.5) + 
+  scale_y_continuous("Precipitation (mm)", 
+                     sec.axis = sec_axis(~ (. - a)/b, 
+                                         name = expression("Temperature ("~degree~"C)"))) +
+  theme_bw() + 
+  theme(axis.title=element_text(size=30),axis.text = element_text(size=25),
+      axis.text.x = element_text(angle = 90, vjust = .5),
+      strip.text = element_text(size = rel(3),colour = "black"),
+      legend.key.width = unit(1, "cm"), legend.key.height = unit(1.2, "cm"),
+      legend.text = element_text(size = rel(2)),legend.title = element_text(size = rel(2.5))) +
+  theme(axis.line.y.right = element_line(color = "red"),
+        axis.ticks.y.right = element_line(color = "red"),
+        axis.text.y.right = element_text(color = "red"),
+        axis.title.y.right = element_text(color = "black")
+        ) +
+  #  ggtitle("Climatology for Panjshir (1981-2010)") +
+  scale_x_discrete(labels=month.abb)  
+
+
+```
+
+Output is saved in the following location 
+```{r}
+ggsave("E:\\Panjshir_snowcover_paper_Santosh\\outputFIGURES\\PanjshirClimatology1.png", width = 7.5, height = 6, units = "in")
+
+```
+
+### Hence the climatology of the region is prepared. 
+
+
+
+

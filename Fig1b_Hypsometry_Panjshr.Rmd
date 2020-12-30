@@ -1,0 +1,117 @@
+---
+title: "Hypsometry of Panjshir catchment"
+author: "kabiraj"
+date: "12/28/2020"
+output: html_document
+---
+
+<!-- # ```{r setup, include=FALSE} -->
+<!-- # knitr::opts_chunk$set(echo = TRUE) -->
+<!-- # ``` -->
+
+## Background
+
+Hypsometry describes the distribution of elevation of land with respect to occupied area. A hypsometric curve is a histogram or cumulative distribution function of elevations in a geographical area.
+
+Firstly the library and data are imported 
+
+```{r, message=FALSE}
+  rm(list =ls())
+
+  library(data.table)
+  library(dplyr)
+  library(ggplot2)
+
+```
+
+## Data waggling 
+
+Next, the data is imported 
+```{r}
+indir <- "E:/Panjshir_snowcover_paper_Santosh/input_files_4figure/baseERAmodel_input/"
+outdir <- "E:/Panjshir_snowcover_paper_Santosh/outputFIGURES/"
+
+#read header names
+variable_head <- unlist(strsplit(scan(paste(indir,"hrus.par",sep=""),"",nlines = 1,skip = 1,sep = "\n"),split = "\t"))
+
+#read data
+hrus <- fread(paste(indir,"hrus.par",sep=""),skip = 5)
+
+#assign column names
+colnames(hrus) <- variable_head
+
+#removing the last row
+hrus1 <- head(hrus,-1)
+
+#Selecting the area and elevation from the data frame
+AreaElevation <- hrus1 %>%
+  transmute(Area = area,
+            Elevation = elevation)
+
+#defining the elevation range
+Erange <- c(1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000)
+
+#creating an empty matrix
+emptyTable <- matrix(data=NA, nrow = length(Erange), ncol = 3)
+
+#Keeping the range of elevation in the thrid column
+emptyTable[,3] <- Erange
+
+#sum of the elevation below that range 
+for(i in 1:length(Erange)) {
+one <-  filter(AreaElevation, Elevation < Erange[i] )
+emptyTable[i, 1] <- sum(one$Area)
+}
+
+#making sure it as data frame
+emptyTable2 <- as.data.frame(emptyTable) 
+
+#converting the area into the km2
+emptyTable2$V2 <- round(emptyTable2$V1 /1000000, 0)
+
+
+```
+
+## Visulization
+
+
+```{r}
+ggplot(data = emptyTable2) +
+  geom_line(mapping = aes(x = V3, y = V2), color = "blue", size =1.5) +
+  geom_point(mapping = aes(x = V3, y = V2), color = "blue", size =2) +
+  ylab("Cumulative area (km2)") + xlab("Elevation (%)") + 
+  geom_segment( aes(x = V3, xend=V3, y=0, yend=V2), color = "black") +
+  theme_bw() + 
+  theme(axis.title=element_text(size=30),axis.text = element_text(size=25),
+        axis.text.x = element_text(angle = 0, vjust = .5),
+        strip.text = element_text(size = rel(3),colour = "black"),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(1.2, "cm"),
+        legend.text = element_text(size = rel(2)),legend.title = element_text(size = rel(2.5)))
+
+```
+
+
+Output is saved in the following location 
+```{r}
+ggsave("E:\\Panjshir_snowcover_paper_Santosh\\outputFIGURES\\1PanjshirHypsometry1.png", width=200,height=140,units="mm",dpi = 600, scale = 1)
+
+```
+
+### Hence the Hypsometry of the region is prepared. 
+
+```{r,  include=FALSE}
+#keeping it just as an alternative
+ggplot(data = emptyTable2) +
+  geom_line(mapping = aes(x = V3, y = V2), color = "blue", size =1.5) +
+  geom_point(mapping = aes(x = V3, y = V2), color = "blue", size =2) +
+  ylab("Cumulative area (km2)") + xlab("Elevation (%)") + 
+  geom_segment( aes(x = 0, xend=V3, y=V2, yend=V2), color = "black") +
+  theme_bw() + 
+  theme(axis.title=element_text(size=30),axis.text = element_text(size=25),
+        axis.text.x = element_text(angle = 0, vjust = .5),
+        strip.text = element_text(size = rel(3),colour = "black"),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(1.2, "cm"),
+        legend.text = element_text(size = rel(2)),legend.title = element_text(size = rel(2.5)))
+        
+```
+

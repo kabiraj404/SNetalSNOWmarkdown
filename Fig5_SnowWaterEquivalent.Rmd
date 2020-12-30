@@ -1,0 +1,139 @@
+---
+title: "SoilWaterEquivalent"
+author: "kabiraj"
+date: "12/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Background
+
+Hypsometry describes the distribution of elevation of land with respect to occupied area. A hypsometric curve is a histogram or cumulative distribution function of elevations in a geographical area.
+
+Firstly the library and data are imported 
+
+```{r, message=FALSE}
+#removing the old files
+rm(list =ls())
+
+#required package 
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+
+```
+
+## Data waggling 
+
+Next, the data is imported 
+```{r}
+indir <- "E:/Panjshir_snowcover_paper_Santosh/input_files_4figure/baseERAmodel_input/"
+outdir <- "E:/Panjshir_snowcover_paper_Santosh/outputFIGURES/"
+
+#read header
+header <- unlist(strsplit(scan(paste(indir,"TimeLoop_1981-2018.dat",sep=""),"",nlines = 1,skip = 5,sep = "\n"),split = "\t"))
+#get the timeloop
+timeloop <- fread(paste(indir,"TimeLoop_1981-2018.dat",sep=""),skip = 10) 
+
+#keep the length of the timeloop same as header length 
+timeloop <- timeloop[,1:length(header)]
+#keep the header names 
+colnames(timeloop) <- c(header)
+
+#extract the month and years 
+timeloop$Dates <- as.Date(timeloop$ID, "%Y-%m-%d")
+timeloop$Year <- format(timeloop$Dates,"%Y")
+timeloop$Month <- format(timeloop$Dates,"%m")
+
+#Monthly Calculation for each year for analysis
+MonthlyValue1 <- timeloop %>% 
+                group_by(Month) %>% 
+                summarise(AvgSWE = round(mean(snowTotSWE),0),
+                           AvgSmelt = round(mean(snowMelt),0),
+                          AvgSolRad = round(mean(solRad),0),
+                          AvgTmax = round(mean(tmax),0))
+
+#converting to data frame
+MonthlyValue <- as.data.frame(MonthlyValue1)
+
+#creating the scale factor for the range of y axis 
+scaleFactor <- max(MonthlyValue$AvgSWE) / max(MonthlyValue$AvgSmelt)
+
+```
+
+
+## Visulization
+```{r}
+
+#plotting 
+ggplot(MonthlyValue, aes(x=Month,  width=.4)) +
+  geom_col(aes(y=AvgSWE), fill="blue", position = position_nudge(x = -.4), alpha =0.4) +
+  geom_col(aes(y=AvgSmelt * scaleFactor), fill="red", alpha = 0.4) +
+  scale_y_continuous(name="Snow Water Equivalent (mm/day)", 
+                     sec.axis=sec_axis(~./scaleFactor, name="Snowmelt (mm/day)")) +
+  theme_bw() +
+  theme(
+    axis.title.y.left=element_text(color="blue"),
+    axis.text.y.left=element_text(color="blue"),
+    axis.title.y.right=element_text(color="red"),
+    axis.text.y.right=element_text(color="red"),
+    axis.line.y.left = element_line(color = "blue"),
+    axis.line.y.right = element_line(color = "red")) +
+  labs(title = "Snow water equivalent and snow melt", x = "Months") +
+  theme(axis.title=element_text(size=20),axis.text = element_text(size=16),
+        axis.text.x = element_text(angle = 0, vjust = .5)) +
+  scale_x_discrete(labels=month.abb)
+```
+
+
+
+
+saving the data 
+```{r}
+
+ggsave("E:\\Panjshir_snowcover_paper_Santosh\\outputFIGURES\\5b_SWEvsSmelt.png", width = 7, height = 6, units = "in")
+
+
+```
+
+
+##snowWaaterEquivalent vs snowmelt plot 
+
+```{r}
+scaleFactor2 <- max(MonthlyValue$AvgSolRad) / max(MonthlyValue$AvgTmax)
+
+ggplot(MonthlyValue, aes(x=Month,  width=.4)) +
+  geom_col(aes(y=AvgSolRad), fill="blue", position = position_nudge(x = -.4), alpha =0.4) +
+  geom_col(aes(y=AvgTmax * scaleFactor2), fill="red", alpha = 0.4) +
+  scale_y_continuous(name="Solar Radiation (W/m2)", 
+                     sec.axis=sec_axis(~./scaleFactor2, name="Maximum Temperature (*C)")) +
+  theme_bw() +
+  theme(
+    axis.title.y.left=element_text(color="blue"),
+    axis.text.y.left=element_text(color="blue"),
+    axis.title.y.right=element_text(color="red"),
+    axis.text.y.right=element_text(color="red"),
+    axis.line.y.left = element_line(color = "blue"),
+    axis.line.y.right = element_line(color = "red")) +
+  labs(title = "Solar radiation and Maximum Temperature", x = "Months") +
+  theme(axis.title=element_text(size=20),axis.text = element_text(size=16),
+        axis.text.x = element_text(angle = 0, vjust = .5),
+        strip.text = element_text(size = rel(3),colour = "black"),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(1.2, "cm"),
+        legend.text = element_text(size = rel(2)),legend.title = element_text(size = rel(2.5))) +
+  scale_x_discrete(labels=month.abb)
+```
+
+```{r}
+
+
+
+ggsave("E:\\Panjshir_snowcover_paper_Santosh\\outputFIGURES\\5a_SWEvsSmelt.png", width = 7.6, height = 6, units = "in")
+
+
+```

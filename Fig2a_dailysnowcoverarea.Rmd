@@ -1,0 +1,200 @@
+---
+title: "snowDaily"
+author: "kabiraj"
+date: "12/29/2020"
+output: html_document
+---
+
+<!-- # ```{r setup, include=FALSE} -->
+<!-- # knitr::opts_chunk$set(echo = TRUE) -->
+<!-- # ``` -->
+
+## Background
+
+Hypsometry describes the distribution of elevation of land with respect to occupied area. A hypsometric curve is a histogram or cumulative distribution function of elevations in a geographical area.
+
+Firstly the library and data are imported 
+
+```{r, message=FALSE}
+rm(list=ls())
+
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(zoo)
+library(scales)
+library(ggpubr) #used in the pearson coefficient
+
+```
+
+## Data waggling 
+
+Next, the data is imported 
+```{r}
+indir <- "E:/Panjshir_snowcover_paper_Santosh/input_files_4figure/baseERAmodel_input/"
+outdir <- "E:/Panjshir_snowcover_paper_Santosh/outputFIGURES/"
+
+#read header
+header <- unlist(strsplit(scan(paste(indir,"TimeLoop_1981-2018.dat",sep=""),"",nlines = 1,skip = 5,sep = "\n"),split = "\t"))
+#get the timeloop
+timeloop <- fread(paste(indir,"TimeLoop_1981-2018.dat",sep=""),skip = 10) 
+
+#keep the length of the timeloop same as header length 
+timeloop <- timeloop[,1:length(header)]
+#keep the header names 
+colnames(timeloop) <- c(header)
+
+#extract the month and years 
+timeloop$Dates <- as.Date(timeloop$ID, "%Y-%m-%d")
+timeloop$Year <- format(timeloop$Dates,"%Y")
+timeloop$Month <- format(timeloop$Dates,"%m")
+#timeloop$Day <- format(timeloop$Dates,"%d")
+
+timeloop$modisSnow[timeloop$modisSnow=="Inf"]<-NA
+
+# for the timeseries and scatter plot
+analysis1 <-	timeloop %>%
+                filter(Year <= 2018) %>%
+                filter(Year >= 2003) %>%
+                mutate(MODISMovingMean = (rollmean(modisSnow, 8, fill = NA, partial=TRUE)),
+                       J2KMovingMean = (rollmean(snowCoverAreaT, 8, fill = NA,  partial=TRUE))) #/1000000))		
+
+#for monthly bar graph 	
+analysis2 <- analysis1 %>%	
+             group_by(Month) %>%
+             summarize (MODIS =mean(MODISMovingMean, na.rm=TRUE),
+                        Model = mean(J2KMovingMean, na.rm=TRUE))		
+
+AnnualPlot <- reshape2::melt(analysis2, id.vars='Month')
+
+
+#for daily min-max graph 	
+analysis3 <- analysis1 %>%	
+             group_by(Year) %>%
+             transmute(ModelDaily = snowCoverAreaT,
+                        dAYS = sequence(n()))
+
+analysis4 <- analysis3 %>%
+             group_by(dAYS) %>%
+             mutate(MeanDay = mean(ModelDaily, na.rm = TRUE))
+#since it is mean of the day wise we can remove the other values
+analysis4$MeanDay[366:5844] <- NA
+
+
+```
+
+##Visulizaation
+```{r, warning= FALSE}
+
+ggplot(analysis1, aes(Dates)) +
+  geom_point(aes(y=MODISMovingMean, colour="MODIS (8 days)"), size = 0.65, shape= 1)+
+  geom_point(aes(y=J2KMovingMean, colour="Model (8 days)"), size = 0.65, shape = 2) +
+  geom_line(aes(y=snowCoverAreaT, colour="Model (Daily)"))+
+  #scale_x_continuous(name = "Year", limits = c(2003,2018), breaks = seq(2003,2018, 2)) + #to find the range of data to be displayed will fix latter
+  labs(x="Year",
+       y=expression(Snow~Cover~Area~(km^{2}))) +
+  theme_bw() + 
+  scale_colour_manual(" ",
+                   breaks = c("MODIS (8 days)", "Model (8 days)", "Model (Daily)"), 
+                   values=c("blue", "red", "black")) +
+  theme(axis.title=element_text(size=23),axis.text = element_text(size=18)) +
+  theme(legend.direction = "horizontal", legend.position = "bottom", legend.text=element_text(size=15)) +
+  guides(shape= FALSE) 
+##keeping this guide at the end to remove the line in he points but not successful :)
+
+```
+
+saving the data 
+```{r}
+
+ggsave("E:\\Panjshir_snowcover_paper_Santosh\\outputFIGURES\\2a_dailySnowCocverarea.png", width = 7.5, height = 4, units = "in")
+
+
+```
+
+### Scatter plot between the modis and model snow cover area 
+
+```{r, warning= FALSE}
+
+ggplot(analysis1, aes(x=MODISMovingMean, y=snowCoverAreaT)) + 
+#ggplot(analysis1, aes(x=modisSnow, y=snowCoverAreaT)) + 
+#ggplot(analysis1, aes(x=MODISMovingMean, y=J2KMovingMean)) +  
+  geom_point(color="red", alpha= 0.37) + 
+  geom_smooth(method=lm, se=FALSE) +
+  labs(x=expression(Modis~Area~(km^{2})),
+       y=expression(MODEL~Area~(km^{2}))) +
+  theme_bw() +
+  stat_cor(method = "pearson", label.x = 50, label.y = 2050) +
+  theme(axis.title=element_text(size=23),axis.text = element_text(size=18))
+
+```
+
+
+```{r}
+
+ggsave("E:\\Panjshir_snowcover_paper_Santosh\\outputFIGURES\\2b_ScatterdailySnowCocverarea.png", width = 6.5, height = 6.5, units = "in")
+
+
+```
+
+
+
+```{r}
+
+ggplot(data = AnnualPlot, aes(x = Month, y = value, fill = variable, group = variable)) + 
+  geom_col(position='dodge', alpha= 0.56)+ ##stat='identity',
+  labs(x="Months",
+     y=expression(Area~(km^{2}))) +
+  scale_y_continuous(labels = comma) +
+  theme_bw() +
+  scale_x_discrete(labels=month.abb) +
+  scale_fill_manual("", values = c("MODIS" = "blue", "Model" = "red")) +
+   theme(axis.title=element_text(size=25),axis.text = element_text(size=17)) +
+   theme(legend.direction = "horizontal", 
+         legend.position = "bottom", 
+         legend.title = element_blank(), 
+         legend.text=element_text(size=16)) 
+
+```
+
+
+
+```{r}
+
+ggsave("E:\\Panjshir_snowcover_paper_Santosh\\outputFIGURES\\2c_MonthlySnowCocverarea.png", width = 7.5, height = 5.8, units = "in")
+
+
+```
+
+#for daily scatter
+
+```{r}
+
+ggplot(analysis4) + 
+  geom_line(aes(x=dAYS, y = ModelDaily, color="Range of snow cover"), alpha= 0.27) +
+  geom_point((aes(x= dAYS, y= MeanDay, color = "Average of days snow cover"))) +
+    theme_bw() + 
+  scale_colour_manual(" ",
+                   breaks = c("Range of snow cover", "Average of days snow cover"), 
+                   values=c("gray44", "red")) +
+  labs(x="Days",
+     y=expression(Area~(km^{2}))) +
+  scale_y_continuous(labels = comma) +
+  theme(axis.title=element_text(size=25),axis.text = element_text(size=17)) +
+  theme(legend.direction = "horizontal", 
+         legend.position = "bottom", 
+         legend.title = element_blank(), 
+         legend.text=element_text(size=16)) 
+
+
+
+
+```
+
+```{r}
+
+ggsave("E:\\Panjshir_snowcover_paper_Santosh\\outputFIGURES\\2d_DailyScatterSnowCocver.png", width = 7.5, height = 5.8, units = "in")
+
+
+```
+
